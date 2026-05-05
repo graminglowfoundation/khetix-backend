@@ -1,12 +1,8 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import { startAlertScheduler } from './utils/alertScheduler.js';
 
-// ⚠️ CRITICAL: dotenv.config() must run in its own module BEFORE any other
-// import that reads process.env. In ESM all import statements are hoisted and
-// executed before any module-level code, so placing dotenv.config() here and
-// importing alertScheduler below on the same pass means alertScheduler module
-// code runs with an EMPTY process.env.
-// FIX: alertScheduler import moved to AFTER dotenv loads (see bottom of imports).
+// ⚠️ CRITICAL: Load .env BEFORE importing anything that uses process.env
 dotenv.config();
 
 import cors from 'cors';
@@ -14,10 +10,6 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
-// FIX: Added cookie-parser — auth middleware reads req.cookies.token but
-// without this middleware req.cookies is always undefined, so cookie-based
-// auth silently falls through to "no token" and returns 401.
-import cookieParser from 'cookie-parser';
 import hpp from 'hpp';
 import cluster from 'cluster';
 import os from 'os';
@@ -35,10 +27,7 @@ const __dirname  = path.dirname(__filename);
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import fieldRoutes from './routes/fields.js';
-
-// FIX: Utilities imported AFTER dotenv.config() runs so process.env is populated.
-// sendFarmAlertToUser removed — it was imported but never used in this file.
-import { startAlertScheduler } from './utils/alertScheduler.js';
+import { sendFarmAlertToUser } from './utils/pushNotification.js';
 
 const PORT    = process.env.PORT || 5000;
 const NUM_CPUS = os.cpus().length;
@@ -46,12 +35,8 @@ const isDev   = process.env.NODE_ENV === 'development';
 
 // ============================================
 // CLUSTER: Use all CPU cores in production
-// FIX: Guarded by DISABLE_CLUSTER env var for Render free tier.
-// Render reports many virtual CPUs but the container only has 512 MB RAM.
-// Forking NUM_CPUS workers (4–8) × ~100 MB each = instant OOM crash.
-// render.yaml sets DISABLE_CLUSTER=true so the server runs single-process.
 // ============================================
-if (!isDev && !process.env.DISABLE_CLUSTER && cluster.isPrimary) {
+if (!isDev && cluster.isPrimary) {
   logger.info(`Primary ${process.pid} is running — forking ${NUM_CPUS} workers`);
   for (let i = 0; i < NUM_CPUS; i++) cluster.fork();
   cluster.on('exit', (worker) => {
@@ -177,10 +162,6 @@ async function createApp() {
   // ============================================
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
-  // FIX: cookieParser must be registered so req.cookies is populated.
-  // auth middleware (auth1.js) reads req.cookies.token for cookie-based auth.
-  // Without this, cookie login always returned 401 "No token provided".
-  app.use(cookieParser());
   app.use(mongoSanitize());
   app.use(xssSanitizer);
   app.use(hpp());

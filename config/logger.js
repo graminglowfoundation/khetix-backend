@@ -30,10 +30,16 @@ const transports = [
   new winston.transports.Console(),
   new winston.transports.File({
     filename: 'logs/error.log',
-    level: 'error',
+    level:    'error',
+    maxsize:  5 * 1024 * 1024, // 5 MB per file
+    maxFiles: 2,                // keep 2 rotated files max
+    tailable: true,
   }),
   new winston.transports.File({
     filename: 'logs/all.log',
+    maxsize:  10 * 1024 * 1024, // 10 MB per file
+    maxFiles: 2,
+    tailable: true,
   }),
 ];
 

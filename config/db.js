@@ -17,9 +17,12 @@ mongoose.set('debug',          false);
 mongoose.set('bufferCommands', false); // fail immediately on connection loss
 
 // ── MongoDB connection options ─────────────────────────────────────────────
+// FIX: maxPoolSize reduced 20→5, minPoolSize reduced 5→1 for Render free tier.
+// The old values kept up to 25 persistent TCP connections alive consuming
+// ~80–120 MB at idle — far too much inside a 512 MB container.
 const mongooseOptions = {
-  maxPoolSize:              20,
-  minPoolSize:              5,
+  maxPoolSize:              5,
+  minPoolSize:              1,
   serverSelectionTimeoutMS: 10_000,
   socketTimeoutMS:          60_000,
   connectTimeoutMS:         15_000,
@@ -112,14 +115,24 @@ export async function connectDB() {
   }
 }
 
+// ── Reconnect guard ────────────────────────────────────────────────────────
+// FIX: Without this flag every 'disconnected' event fired a new reconnect()
+// call independently. Under flaky Atlas connectivity (common on Render free
+// tier) those calls piled up — the logs showed dozens firing at the same
+// millisecond — each holding its own timer and connection attempt in memory.
+// The boolean ensures only one reconnect loop runs at a time.
+let isReconnecting = false;
+
 async function reconnect() {
+  if (isReconnecting) return;
+  isReconnecting = true;
   try {
     await mongoose.connect(MONGO_URI, mongooseOptions);
     logger.info('✅ MongoDB reconnected successfully');
+    isReconnecting = false;
   } catch (err) {
-    // FIX: Same Winston printf issue as above — was `logger.error('...:', err.message)`
-    // which printed an empty line. Now uses template literal so you can see WHY it failed.
     logger.error(`❌ Reconnection failed: ${err?.message || String(err)}`);
+    isReconnecting = false;
     setTimeout(reconnect, 5_000);
   }
 }

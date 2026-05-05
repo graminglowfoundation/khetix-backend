@@ -42,7 +42,7 @@ cd "d:\new\app devlopment\backend"
 git init
 git add .
 git commit -m "Ready for Render deployment"
-git remote add origin https://github.com/YOUR_USERNAME/khetix-backend.git
+git remote add origin https://github.com/graminglowfoundation/khetix-backend.git
 git branch -M main
 git push -u origin main
 ```

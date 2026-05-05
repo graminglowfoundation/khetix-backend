@@ -23,5 +23,13 @@ services:
         value: 30d
       - key: LOG_LEVEL
         value: info
+      - key: DISABLE_CLUSTER
+        # Prevents Node.js from forking multiple workers on Render free tier.
+        # Without this, cluster.fork() creates 4-8 processes × ~100MB = OOM.
+        value: "true"
+      - key: NODE_OPTIONS
+        # Hard-caps Node heap to 400MB, leaving ~100MB for OS + native libs.
+        # Prevents silent OOM kills that Render reports as "memory exceeded".
+        value: --max-old-space-size=400
       - key: API_BASE_URL
         sync: false
