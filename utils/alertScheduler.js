@@ -141,6 +141,7 @@ async function checkWeatherForUser(user) {
       ...alert,
       alertType: 'WEATHER_ALERT',
       _fcmToken: user.fcmToken,
+      _preferences: user.preferences,
     });
     if (success) logger.info(`[alertScheduler] Sent to ${user._id}: ${alert.title}`);
     else logger.warn(`[alertScheduler] ❌ sendFarmAlertToUser returned false for user ${user._id}`);
@@ -159,10 +160,10 @@ async function processBatched(items, fn, batchSize = 10, delayMs = 1000) {
 }
 
 export function startAlertScheduler() {
-  logger.info('[alertScheduler] Starting farm alert scheduler...');
+  logger.info('[alertScheduler] Starting farm alert scheduler (every 5 hours: 00:00, 05:00, 10:00, 15:00, 20:00 UTC)...');
 
-  cron.schedule('0 * * * *', async () => {
-    logger.info('[alertScheduler] ⏰ Hourly weather check starting...');
+  cron.schedule('0 */5 * * *', async () => {
+    logger.info('[alertScheduler] ⏰ 5-hour weather check starting...');
     try {
       // Robust query: fcmToken must exist and not be empty. Preferences can be missing (we fallback to true).
       const users = await User.find({

@@ -226,7 +226,7 @@ export async function broadcastPush(payload) {
  *   _fcmToken  — optional: pass the already-fetched token to skip the DB lookup
  *                (used by alertScheduler which already has the user document)
  */
-export async function sendFarmAlertToUser(userId, { title, body, alertType = 'GENERAL', _fcmToken }) {
+export async function sendFarmAlertToUser(userId, { title, body, alertType = 'GENERAL', _fcmToken, _preferences }) {
   // ── Guard: Firebase must be ready ────────────────────────────────────────
   if (!firebaseReady) {
     console.error(
@@ -237,10 +237,11 @@ export async function sendFarmAlertToUser(userId, { title, body, alertType = 'GE
   }
 
   try {
-    // ── Resolve FCM token ─────────────────────────────────────────────────
-    // If the caller (e.g. alertScheduler) already has the token from its own
-    // DB query, use it directly to avoid a redundant round-trip.
-    let fcmToken = _fcmToken;
+    // ── Resolve FCM token + preferences ──────────────────────────────────
+    // If the caller (e.g. alertScheduler) already has both from its lean query,
+    // use them directly to avoid a redundant DB round-trip.
+    let fcmToken    = _fcmToken;
+    let preferences = _preferences;
 
     if (!fcmToken) {
       const user = await User.findById(userId).select('fcmToken preferences');
@@ -258,12 +259,17 @@ export async function sendFarmAlertToUser(userId, { title, body, alertType = 'GE
         return false;
       }
 
-      if (user.preferences?.notifications?.push === false) {
-        console.info(`[pushNotification] sendFarmAlertToUser: User ${userId} has push notifications disabled.`);
-        return false;
-      }
+      fcmToken    = user.fcmToken;
+      preferences = user.preferences;
+    }
 
-      fcmToken = user.fcmToken;
+    // ── FIX: Push preference check MUST run regardless of whether _fcmToken
+    // was pre-supplied. Previously, when alertScheduler passed _fcmToken directly
+    // the entire preference block was skipped, sending notifications to users
+    // who had explicitly disabled push alerts.
+    if (preferences?.notifications?.push === false) {
+      console.info(`[pushNotification] sendFarmAlertToUser: User ${userId} has push notifications disabled.`);
+      return false;
     }
 
     // ── Send DATA-ONLY message ────────────────────────────────────────────
