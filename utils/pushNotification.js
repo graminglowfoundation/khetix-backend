@@ -40,14 +40,22 @@ const SERVICE_ACCOUNT_PATH = path.join(__dirname, '..', 'config', 'firebase-serv
 // ── Initialise Firebase Admin (lazy, singleton) ───────────────────────────────
 let firebaseReady = false;
 
+// 1. Define the Render-specific secret path
+const RENDER_SECRET_PATH = '/etc/secrets/firebase-service-account.json';
+
 function initFirebase() {
   if (firebaseReady || admin.apps.length > 0) { firebaseReady = true; return; }
 
   try {
     let serviceAccount;
 
-    // PRODUCTION: Try environment variable first (for Render deployment)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    // FIRST: Check if the file exists at the Render Secret File location
+    if (existsSync(RENDER_SECRET_PATH)) {
+      serviceAccount = JSON.parse(readFileSync(RENDER_SECRET_PATH, 'utf8'));
+      console.log('[pushNotification] Using Firebase credentials from Render Secret File');
+    }
+    // SECOND: Try environment variable (as a backup)
+    else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       try {
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         console.log('[pushNotification] Using Firebase credentials from environment variable');
@@ -56,18 +64,13 @@ function initFirebase() {
         return;
       }
     }
-    // DEVELOPMENT: Fall back to local file
+    // THIRD: Fall back to local development path
     else if (existsSync(SERVICE_ACCOUNT_PATH)) {
       serviceAccount = JSON.parse(readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
       console.log('[pushNotification] Using Firebase credentials from local file');
     }
-    // NO CREDENTIALS FOUND
     else {
-      console.warn(
-        '[pushNotification] Firebase credentials not found. Push notifications disabled.\n' +
-        'For local development: Add firebase-service-account.json to config/\n' +
-        'For production: Set FIREBASE_SERVICE_ACCOUNT environment variable'
-      );
+      console.warn('[pushNotification] Firebase credentials not found at /etc/secrets/ or local config/');
       return;
     }
 
@@ -78,7 +81,6 @@ function initFirebase() {
     console.error('[pushNotification] Firebase init failed:', err.message);
   }
 }
-
 initFirebase();
 
 // ── Core send helper ──────────────────────────────────────────────────────────
