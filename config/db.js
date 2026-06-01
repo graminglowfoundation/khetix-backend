@@ -17,9 +17,13 @@ mongoose.set('debug',          false);
 mongoose.set('bufferCommands', false); // fail immediately on connection loss
 
 // ── MongoDB connection options ─────────────────────────────────────────────
+// FIX: Reduced maxPoolSize 20→5 and minPoolSize 5→1 for Render's 512 MB free tier.
+// Each connection holds a socket + buffer (~3–5 MB overhead). The old values
+// reserved 60–100 MB for the pool alone before any requests arrived.
+// A single-process Node app on a low-traffic server needs at most 5 connections.
 const mongooseOptions = {
-  maxPoolSize:              20,
-  minPoolSize:              5,
+  maxPoolSize:              5,
+  minPoolSize:              1,
   serverSelectionTimeoutMS: 10_000,
   socketTimeoutMS:          60_000,
   connectTimeoutMS:         15_000,
