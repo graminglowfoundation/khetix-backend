@@ -1,30 +1,3 @@
-/**
- * utils/pushNotification.js
- *
- * Mobile push notifications via Firebase Cloud Messaging (FCM).
- *
- * SETUP (one-time):
- *  1. Go to Firebase Console → Project Settings → Service Accounts
- *  2. Click "Generate new private key" → download the JSON file
- *  3. Save it as  config/firebase-service-account.json  (add to .gitignore!)
- *  4. npm install firebase-admin
- *
- * ANDROID APP:
- *  - Add Firebase to the Android project (google-services.json)
- *  - After login, call  PATCH /api/user/fcm-token  with { fcmToken: "..." }
- *  - The token is stored in User.fcmToken and used here automatically.
- *
- * SCALE NOTE:
- *  sendFarmAlertToMany() uses FCM sendMulticast (500 tokens / call).
- *  For 1 000+ users sharing the same alert, that means just 2 FCM API calls
- *  instead of 1 000 individual sends.
- *
- * FIX (2026-05-31):
- *  - Replaced sendEachForMulticast (unavailable in firebase-admin v11 and below)
- *    with sendMulticast, which is available in all firebase-admin versions.
- *  - Added multilingual support: alert messages are sent in the user's preferred
- *    language (en / hi / bn). Language is passed as part of the payload.
- */
 
 import admin from 'firebase-admin';
 import { readFileSync, existsSync } from 'fs';
@@ -33,7 +6,17 @@ import path from 'path';
 import User from '../models/User.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SERVICE_ACCOUNT_PATH = path.join(__dirname, '..', 'config', 'firebase-service-account.json');
+// 1. Define both local and Render paths
+const LOCAL_PATH = path.join(__dirname, '..', 'config', 'firebase-service-account.json');
+const RENDER_PATH = '/etc/secrets/firebase-service-account.json';
+
+// 2. Determine which path actually exists
+let SERVICE_ACCOUNT_PATH = null;
+if (existsSync(RENDER_PATH)) {
+  SERVICE_ACCOUNT_PATH = RENDER_PATH; // Used when deployed on Render
+} else if (existsSync(LOCAL_PATH)) {
+  SERVICE_ACCOUNT_PATH = LOCAL_PATH; // Used during local development
+}
 
 // FCM multicast hard limit
 const FCM_BATCH_SIZE = 500;
@@ -44,7 +27,7 @@ let firebaseReady = false;
 function initFirebase() {
   if (firebaseReady || admin.apps.length > 0) { firebaseReady = true; return; }
 
-  if (!existsSync(SERVICE_ACCOUNT_PATH)) {
+  if (!SERVICE_ACCOUNT_PATH) {
     console.warn(
       '[pushNotification] firebase-service-account.json not found. ' +
       'Push notifications disabled. Add the file to config/ to enable.'
