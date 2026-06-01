@@ -31,14 +31,20 @@ const transports = [
   new winston.transports.File({
     filename: 'logs/error.log',
     level: 'error',
+    maxsize: 5 * 1024 * 1024,  // 5 MB max per file — prevents unbounded disk/memory growth
+    maxFiles: 2,                // keep at most 2 rotated files
   }),
   new winston.transports.File({
     filename: 'logs/all.log',
+    maxsize: 10 * 1024 * 1024, // 10 MB max per file
+    maxFiles: 2,
   }),
 ];
 
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'debug',
+  // Production uses 'warn' to avoid flooding all.log with info/debug lines.
+  // Set LOG_LEVEL in .env to override (e.g. LOG_LEVEL=debug for local dev).
+  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'debug'),
   levels,
   format,
   transports,
